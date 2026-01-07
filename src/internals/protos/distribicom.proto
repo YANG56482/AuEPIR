@@ -135,6 +135,8 @@ message ClientRegistryRequest {
   uint32 client_port = 2;
 
   bytes galois_keys = 3;
+
+  // bytes secret_key = 4;
 }
 
 message ClientRegistryReply {
@@ -205,6 +207,8 @@ message Configs {
   bool use_symmetric = 9;
   bool use_batching = 10;
   bool use_recursive_mod_switching = 11;
+
+  double malicious_probability = 12;
 };
 
 // all configs necessary for individual client/worker ?

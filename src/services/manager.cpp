@@ -1,6 +1,7 @@
 #include "manager.hpp"
 #include <grpc++/grpc++.h>
 #include "utils.hpp"
+// #include "seal/seal.h"
 
 #define UNUSED(x) (void)(x)
 
@@ -63,7 +64,10 @@ namespace services {
             async_verify_worker(parts, worker_creds);
 #endif
 
-            put_in_result_matrix(parts_vec);
+            // put_in_result_matrix(parts_vec);
+            // YTH
+            put_in_result_matrix(parts_vec, worker_creds);
+            // YTH
 
             auto ledger = epoch_data.ledger;
 
@@ -117,6 +121,13 @@ namespace services {
         std::shared_lock lock(mtx);
         ledger->worker_list.reserve(work_streams.size());
         for (auto &worker: work_streams) {
+
+            // yth
+            if(current_epoch_blacklist.count(worker.first)) {
+                continue;
+            }
+            // yth
+
             ledger->worker_list.push_back(worker.first);
             ledger->worker_verification_results.insert(
                     {
@@ -142,8 +153,27 @@ namespace services {
             rnd_msg->mutable_md()->set_round(rnd);
             rnd_msg->mutable_md()->set_epoch(epoch);
 
-            auto latch = std::make_shared<concurrency::safelatch>(work_streams.size());
+            // yth
+            size_t active_workers_count = 0;
+            for(const auto &[name, stream]: work_streams) {
+                if(current_epoch_blacklist.find(name) == current_epoch_blacklist.end()) {
+                    active_workers_count++;
+                }
+            }
+            auto latch = std::make_shared<concurrency::safelatch>(active_workers_count);
+
+            // auto latch = std::make_shared<concurrency::safelatch>(work_streams.size());
+            // yth
+
+            
             for (auto &[name, stream]: work_streams) {
+                
+
+                // yth
+                if(current_epoch_blacklist.count(name)) {
+                    continue;
+                }
+                // yth
 
                 pool->submit(
                         {
@@ -401,6 +431,12 @@ namespace services {
 
             mtx.lock();
             epoch_data = std::move(ed);
+
+            // yth
+            current_epoch_blacklist.clear();
+            std::cout << "[YTH] New Epoch Started. Blacklist cleared." << std::endl;
+            // yth
+
             mtx.unlock();
         });
         std::cout << "Manager::new_epoch: " << time << " ms" << std::endl;
@@ -469,7 +505,7 @@ namespace services {
         }
     }
 
-    void Manager::put_in_result_matrix(const std::vector<std::unique_ptr<concurrency::promise<ResultMatPart>>> &parts) {
+    void Manager::put_in_result_matrix(const std::vector<std::unique_ptr<concurrency::promise<ResultMatPart>>> &parts, const std::string &worker_creds) {
         try {
 
             std::vector<std::unique_ptr<concurrency::promise<math_utils::EmbeddedCiphertext>>> embeddeds(parts.size());
@@ -492,6 +528,23 @@ namespace services {
 
 
             client_query_manager.mutex->lock_shared();
+
+            // YTH
+            bool is_blacklisted = false;
+            {
+                std::shared_lock lock(mtx);
+                if (current_epoch_blacklist.count(worker_creds)) {
+                    is_blacklisted = true;
+                }
+            }
+
+            if (is_blacklisted) {
+                client_query_manager.mutex->unlock_shared();
+                std::cout << "[YTH Write Aborted] Worker " << worker_creds << " is blacklisted. Discarding its data." << std::endl;
+                return; 
+            }
+            // YTH
+
             for (auto i = 0; i < parts.size(); i++) {
                 auto partial_answer = parts[i]->get();
                 auto &ptx_embedding = *embeddeds[i]->get();
@@ -546,25 +599,124 @@ namespace services {
         }
     }
 
+    // bool
+    // Manager::verify_row(std::shared_ptr<math_utils::matrix<seal::Ciphertext>> &workers_db_row_x_query,
+    //                     std::uint64_t row_id,
+    //                     std::uint64_t group_id) {
+    //     try {
+
+    //         auto db_row_x_query_x_challenge_vec = matops->scalar_dot_product(workers_db_row_x_query,
+    //                                                                          epoch_data.random_scalar_vector);
+    //         const auto &expected_result = epoch_data.ledger->db_x_queries_x_randvec[group_id].data[row_id];
+    //         matops->w_evaluator->evaluator->sub_inplace(db_row_x_query_x_challenge_vec->data[0], expected_result);
+
+
+    //         std::cout << "[DEBUG] Ciphertext Size: " << db_row_x_query_x_challenge_vec->data[0].size() << std::endl;
+
+
+    //         const bool is_row_valid = db_row_x_query_x_challenge_vec->data[0].is_transparent();
+
+
+    //         return is_row_valid;
+    //     } catch (std::exception &e) {
+    //         std::cerr << "Manager::verify_row::exception: " << e.what() << std::endl;
+    //         return false;
+    //     }
+    // }
+
     bool
     Manager::verify_row(std::shared_ptr<math_utils::matrix<seal::Ciphertext>> &workers_db_row_x_query,
-                        std::uint64_t row_id,
-                        std::uint64_t group_id) {
-        try {
+                    std::uint64_t row_id,
+                    std::uint64_t group_id,
+                    std::uint64_t client_id) {
+    try {
+        auto db_row_x_query_x_challenge_vec = matops->scalar_dot_product(workers_db_row_x_query,
+                                                                         epoch_data.random_scalar_vector);
 
-            auto db_row_x_query_x_challenge_vec = matops->scalar_dot_product(workers_db_row_x_query,
-                                                                             epoch_data.random_scalar_vector);
-            const auto &expected_result = epoch_data.ledger->db_x_queries_x_randvec[group_id].data[row_id];
-            matops->w_evaluator->evaluator->sub_inplace(db_row_x_query_x_challenge_vec->data[0], expected_result);
-            const bool is_row_valid = db_row_x_query_x_challenge_vec->data[0].is_transparent();
+        const auto &expected_result = epoch_data.ledger->db_x_queries_x_randvec[group_id].data[row_id];
 
+        // matops->w_evaluator->evaluator->transform_from_ntt_inplace(db_row_x_query_x_challenge_vec->data[0]);
 
-            return is_row_valid;
-        } catch (std::exception &e) {
-            std::cerr << "Manager::verify_row::exception: " << e.what() << std::endl;
+        matops->w_evaluator->evaluator->sub_inplace(db_row_x_query_x_challenge_vec->data[0], expected_result);
+
+        auto client_ptr = client_query_manager.id_to_info.at(client_id)->local_client_instance;
+        
+        if (client_ptr) {
+            bool is_valid = client_ptr->decrypt_and_verify(db_row_x_query_x_challenge_vec->data[0]);
+            return is_valid;
+        } else {
+            std::cerr << "Error: Local client instance not found for simulation!" << std::endl;
             return false;
         }
+    } catch (std::exception &e) {
+        std::cerr << "Manager::verify_row::exception: " << e.what() << std::endl;
+        return false;
     }
+}
+
+
+    // YTH
+    void Manager::recover_worker_computation(const std::string &worker_creds) {
+        std::cout << "[YTH Recovery] Initiating Server-side recovery for worker: " << worker_creds << std::endl;
+
+        auto work_info = epoch_data.worker_to_responsibilities.at(worker_creds);
+        auto db_rows = work_info.db_rows;
+        auto range_start = work_info.query_range_start;
+        auto range_end = work_info.query_range_end;
+        auto db_cols = app_configs.configs().db_cols();
+
+        auto ptx_db_access = db.many_reads();
+        auto &full_db_mat = ptx_db_access.mat;
+
+        for (std::uint64_t col_idx = range_start; col_idx < range_end; ++col_idx) {
+
+            auto &client_info = client_query_manager.id_to_info.at(col_idx);
+
+            auto expanded_query_vec = expander->expand_query(
+                client_info->query[0],
+                db_cols, 
+                client_info->galois_keys
+            );
+
+            math_utils::matrix<seal::Ciphertext> query_mat(db_cols, 1);
+            for(size_t k=0; k<db_cols; ++k) {
+                query_mat(k, 0) = std::move(expanded_query_vec[k]);
+            }
+            matops->to_ntt(query_mat.data);
+
+            for (auto row_id : db_rows) {
+                math_utils::matrix<seal::Plaintext> row_mat(1, db_cols);
+                for(size_t k=0; k<db_cols; ++k) {
+                    row_mat(0, k) = full_db_mat(row_id, k);
+                }
+
+                math_utils::matrix<seal::Ciphertext> result_mat;
+                matops->multiply(row_mat, query_mat, result_mat); 
+
+                auto embedded = std::make_unique<math_utils::EmbeddedCiphertext>();
+
+                matops->w_evaluator->get_ptx_embedding(result_mat(0, 0), *embedded);
+                matops->w_evaluator->transform_to_ntt_inplace(*embedded);
+
+                client_query_manager.mutex->lock(); 
+
+                auto &partial_answer_mat = *client_info->partial_answer;
+
+                if (embedded->size() > partial_answer_mat.cols) {
+                    std::cerr << "[YTH Critical] Recovered embedded size " << embedded->size() 
+                              << " > matrix cols " << partial_answer_mat.cols << std::endl;
+                }
+
+                for(size_t j=0; j < embedded->size() && j < partial_answer_mat.cols; ++j) {
+                    partial_answer_mat(row_id, j) = std::move((*embedded)[j]);
+                }
+
+                client_query_manager.mutex->unlock();
+            }
+        }
+        std::cout << "[Recovery] Successfully recovered computation for worker: " << worker_creds << std::endl;
+    }
+    // YTH
 
     void Manager::async_verify_worker(
             const std::shared_ptr<std::vector<std::unique_ptr<concurrency::promise<ResultMatPart>>>> parts_ptr,
@@ -576,6 +728,12 @@ namespace services {
 
                             auto work_responsibility = epoch_data.worker_to_responsibilities[worker_creds];
                             auto rows = work_responsibility.db_rows;
+
+
+                            std::cout << "[DEBUG] Verifying Worker: " << worker_creds 
+                                      << ", Responsibility Rows: " << rows.size() << std::endl;
+
+
                             auto query_row_len =
                                     work_responsibility.query_range_end - work_responsibility.query_range_start;
 
@@ -588,6 +746,11 @@ namespace services {
                             auto worker_verify_time = utils::time_it([&]() {
 
                                 for (size_t i = 0; i < rows.size(); i++) {
+
+
+                                    std::cout << "[DEBUG] Checking row index: " << rows[i] << " (Loop i=" << i << ")" << std::endl;
+
+
                                     auto workers_db_row_x_query = std::make_shared<math_utils::matrix<seal::Ciphertext>>(
                                             query_row_len, 1);
 
@@ -596,15 +759,56 @@ namespace services {
                                         mpdata[j] = parts[j + i * query_row_len]->get()->ctx;
                                     }
 
+                                    // auto is_valid = verify_row(workers_db_row_x_query, rows[i],
+                                    //                            work_responsibility.group_number);
+                                    auto client_id = work_responsibility.query_range_start;
                                     auto is_valid = verify_row(workers_db_row_x_query, rows[i],
-                                                               work_responsibility.group_number);
+                                                            work_responsibility.group_number, 
+                                                            client_id);
+
                                     if (!is_valid) {
+                                        std::cout << "[DEBUG] >>> Row " << rows[i] << " INVALID! <<<" << std::endl;
+                                    }
+
+
+                                    if (!is_valid) {
+
+                                        // yth
+                                        std::cout << "YTH SECURITY ALERT !!!" << std::endl;
+                                        std::cout << "Malicious Worker Detected: " << worker_creds << std::endl;
+                                        std::cout << "Verification failed at DB Row: " << rows[i] << std::endl;
+                                        // yth
+
                                         epoch_data.ledger->worker_verification_results[worker_creds]->set(
                                                 std::make_unique<bool>(false)
+
                                         );
+
+                                        // yth
+                                        {
+                                            std::unique_lock<std::shared_mutex> lock(mtx);
+                                            current_epoch_blacklist.insert(worker_creds);
+                                            std::cout << "YTH Action: Worker " << worker_creds << " added to CURRENT EPOCH BLACKLIST." << std::endl;
+                                        }
+
+                                        try {
+                                            recover_worker_computation(worker_creds);
+                                            epoch_data.ledger->worker_verification_results[worker_creds]->set(
+                                                    std::make_unique<bool>(true));
+                                        } catch (const std::exception& e) {
+                                            std::cout << "[YTH Recovery Failed] Critical error during recovery: " << e.what() << std::endl;
+                                            epoch_data.ledger->worker_verification_results[worker_creds]->set(
+                                                    std::make_unique<bool>(false)
+                                            );
+                                        }
+                                        //yth
+
                                         return;
                                     }
                                 }
+
+
+                                std::cout << "[DEBUG] Worker " << worker_creds << " passed all verification checks." << std::endl;
 
                                 epoch_data.ledger->worker_verification_results[worker_creds]->set(
                                         std::make_unique<bool>(true));

@@ -1,0 +1,8 @@
+{
+    "db_cols": 4096,     
+    "db_rows": 1,        
+    "scheme": "bgv",
+    "polynomial_degree": 4096,
+    "logarithm_plaintext_coefficient": 20,
+    "size_per_element": 256
+  }

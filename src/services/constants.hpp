@@ -15,4 +15,5 @@ namespace services::constants {
 
     // defines the max message size a server expects: 5mb.
     constexpr int max_message_size = 1024 * 1024 * 5;
+    // constexpr int max_message_size = 1024 * 1024 * 256;
 }

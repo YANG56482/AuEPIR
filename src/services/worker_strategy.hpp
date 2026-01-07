@@ -2,16 +2,18 @@
 
 #include <future>
 #include <map>
+#include <random>
+#include <cstdlib>
 #include "distribicom.grpc.pb.h"
 #include "math_utils/matrix_operations.hpp"
 #include "math_utils/query_expander.hpp"
 #include "marshal/marshal.hpp"
 #include "utils.hpp"
+#include "distribicom.pb.h"
 
 namespace services {
 
     struct WorkerServiceTask {
-
         // metadata worker needs to know.
         int epoch;
         int round;
@@ -49,10 +51,11 @@ namespace services::work_strategy {
         std::map<int, seal::GaloisKeys> gkeys;
         std::shared_mutex mu;
         std::unique_ptr<distribicom::Manager::Stub> manager_conn;
+        double malicious_probability = 0.0;
 
     public:
         explicit WorkerStrategy(const seal::EncryptionParameters &enc_params,
-                                std::unique_ptr<distribicom::Manager::Stub> &&manager_conn) noexcept;
+                                std::unique_ptr<distribicom::Manager::Stub> &&manager_conn, double malicious_probability = 0.0) noexcept;
 
         void store_galois_key(seal::GaloisKeys &&keys, int query_position) {
             mu.lock();
@@ -81,16 +84,16 @@ namespace services::work_strategy {
         explicit RowMultiplicationStrategy(const seal::EncryptionParameters &enc_params,
                                            std::shared_ptr<marshal::Marshaller> &m,
                                            std::unique_ptr<distribicom::Manager::Stub> &&manager_conn,
-                                           std::string &&sym_key) :
-            WorkerStrategy(enc_params, std::move(manager_conn)), mrshl(m), sym_key(std::move(sym_key)) {
+                                           std::string &&sym_key,
+                                           double malicious_probability = 0.0) :
+            WorkerStrategy(enc_params, std::move(manager_conn), malicious_probability), mrshl(m), sym_key(std::move(sym_key)) {
         };
 
         math_utils::matrix<seal::Ciphertext> multiply_rows(WorkerServiceTask &task);
 
         void send_response(const WorkerServiceTask &task, math_utils::matrix<seal::Ciphertext> &computed);
 
-
-// assumes there is data to process in the task.
+        // assumes there is data to process in the task.
         void process_task(WorkerServiceTask &&task) override {
             constexpr auto fname = "RowMultiplicationStrategy::process_task: ";
             try {
@@ -100,6 +103,25 @@ namespace services::work_strategy {
 
                 std::cout << fname << "multiplying..." << std::endl;
                 auto answer = multiply_rows(task);
+
+                if (malicious_probability > 0.0) {
+                    static std::random_device rd;
+                    static std::mt19937 gen(rd());
+                    std::uniform_real_distribution<> dis(0.0, 1.0);
+
+                    if (dis(gen) < malicious_probability) {
+                        std::cout << "!!! [YTH MALICIOUS MODE] Injecting Error into Result !!!" << std::endl;
+                        
+                        if (answer.rows > 0 && answer.cols > 0) {
+                            auto& ctx = answer(0, 0);
+                            if (ctx.size() > 0) {
+                                ctx.data()[0] += 1;
+                                std::cout << "!!! [YTH MALICIOUS MODE] Data corrupted successfully !!!" << std::endl;
+                            }
+                        }
+                    }
+                }
+                // YTH
 
                 send_response(task, answer);
             } catch (std::exception &e) {

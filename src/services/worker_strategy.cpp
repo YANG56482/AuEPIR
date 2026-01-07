@@ -3,8 +3,8 @@
 
 namespace services::work_strategy {
     WorkerStrategy::WorkerStrategy(const seal::EncryptionParameters &enc_params,
-                                   std::unique_ptr<distribicom::Manager::Stub> &&manager_conn) noexcept
-            : gkeys(), manager_conn(std::move(manager_conn)) {
+                                   std::unique_ptr<distribicom::Manager::Stub> &&manager_conn, double malicious_probability) noexcept
+            : gkeys(), manager_conn(std::move(manager_conn)), malicious_probability_(malicious_probability) {
 
         pool = std::make_shared<concurrency::threadpool>();
 

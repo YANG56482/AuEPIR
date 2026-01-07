@@ -53,3 +53,4 @@ A logfile with round timings by the server will be written in the directory from
 # Testing
 Distribicom has extensive unit tests which can be found in [/test](/test). Compiled tests can be found under the [/bin](/bin) directory and can be run with ```ctest```
 
+# dpir

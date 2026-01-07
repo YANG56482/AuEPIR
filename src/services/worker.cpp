@@ -36,10 +36,12 @@ namespace services {
             [gen = std::move(gen)]() { return std::byte(gen->generate() % 256); }
         );
 
+        double prob = appcnfgs.configs().malicious_probability();
 
         strategy = std::make_shared<work_strategy::RowMultiplicationStrategy>(
             enc_params,
-            mrshl, std::move(manager_conn), utils::byte_vec_to_64base_string(symmetric_secret_key)
+            mrshl, std::move(manager_conn), utils::byte_vec_to_64base_string(symmetric_secret_key),
+            prob
         );
 
         threads.emplace_back(

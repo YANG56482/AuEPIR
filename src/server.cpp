@@ -132,6 +132,7 @@ int main(int argc, char *argv[]) {
     ofs << "num queries:" << num_clients << std::endl;
     ofs << "results: \n [" << std::endl;
 
+    //  epoch 次数
     for (int i = 0; i < 1; ++i) {
         std::cout << "setting up epoch" << std::endl;
 
@@ -300,6 +301,10 @@ create_client_db(const distribicom::AppConfigs &app_configs, const seal::Encrypt
                         math_utils::compute_expansion_ratio(seal_context.first_context_data()->parms()) * 2,
                         app_configs.configs().db_rows(), i, gkey, gkey_serialised, query, query_marshaled,
                         client_info);
+
+                    // YTH
+                    client_info->local_client_instance = &clients[i];
+                    // YTH
 
                     mtx.lock();
                     cdb.insert({i, std::move(client_info)});

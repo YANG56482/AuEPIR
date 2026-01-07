@@ -87,6 +87,13 @@ namespace services {
         distribicom::AppConfigs app_configs;
 
         std::shared_mutex mtx;
+
+        // yth
+        std::set<std::string> current_epoch_blacklist;
+
+        void recover_worker_computation(const std::string &worker_creds);
+        // yth
+
         std::shared_ptr<concurrency::threadpool> pool;
 
         concurrency::Counter worker_counter;
@@ -158,14 +165,17 @@ namespace services {
 
 
         bool verify_row(std::shared_ptr<math_utils::matrix<seal::Ciphertext>> &workers_db_row_x_query,
-                        std::uint64_t row_id, std::uint64_t group_id);
+                        std::uint64_t row_id, std::uint64_t group_id, std::uint64_t client_id);
 
         void
         async_verify_worker(
             const std::shared_ptr<std::vector<std::unique_ptr<concurrency::promise<ResultMatPart>>>> parts_ptr,
             const std::string worker_creds);
 
-        void put_in_result_matrix(const std::vector<std::unique_ptr<concurrency::promise<ResultMatPart>>> &parts);
+        // void put_in_result_matrix(const std::vector<std::unique_ptr<concurrency::promise<ResultMatPart>>> &parts);
+        // YTH
+        void put_in_result_matrix(const std::vector<std::unique_ptr<concurrency::promise<ResultMatPart>>> &parts, const std::string &worker_creds);
+        // YTH
 
         void calculate_final_answer();;
 
