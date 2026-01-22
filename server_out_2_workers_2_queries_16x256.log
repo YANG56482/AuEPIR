@@ -8,6 +8,7 @@ configs {
   dimensions: 2
   number_of_elements: 176128
   use_batching: true
+  worker_step_size: 10
 }
 main_server_hostname: "localhost:54321"
 number_of_workers: 2
@@ -18,3 +19,14 @@ server_cpus: 2
 num queries:2
 results: 
  [
+3855ms, 
+3072ms, 
+2591ms, 
+3073ms, 
+2172ms, 
+2870ms, 
+2582ms, 
+2878ms, 
+2237ms, 
+1782ms, 
+]

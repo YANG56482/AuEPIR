@@ -65,12 +65,23 @@ namespace math_utils {
         result.resize(1, mat.cols);
 
         for (uint64_t k = 0; k < mat.cols; k++) {
-            result(0, k) = seal::Ciphertext(w_evaluator->context);
+            bool first = true;
             for (uint64_t j = 0; j < mat.rows; j++) {
                 if (left_vec[j] == 0) {
                     continue;
                 }
-                w_evaluator->add(mat(j, k), result(0, k), result(0, k));
+                if (first) {
+                    result(0, k) = mat(j, k);
+                    first = false;
+                } else {
+                    w_evaluator->add(mat(j, k), result(0, k), result(0, k));
+                }
+            }
+            if (first) {
+                // If the vector was all zeros, we need a zero ciphertext of the correct size/params.
+                // We use scalar_multiply by 0 on the first element to generate it.
+                // Assumes mat.rows > 0 (checked at start of function/class).
+                w_evaluator->scalar_multiply(0, mat(0, k), result(0, k));
             }
         }
     }
@@ -145,23 +156,24 @@ namespace math_utils {
     }
 
     void MatrixOperations::to_ntt(std::vector<seal::Plaintext> &m) const {
-        std::for_each(std::execution::par_unseq, m.begin(), m.end(), [this](seal::Plaintext &ptx) {
+        std::for_each(std::execution::seq, m.begin(), m.end(), [this](seal::Plaintext &ptx) {
             w_evaluator->evaluator->transform_to_ntt_inplace(ptx, this->w_evaluator->context.first_parms_id());
         });
     }
 
 
     void MatrixOperations::to_ntt(std::vector<seal::Ciphertext> &m) const {
-        std::for_each(std::execution::par_unseq, m.begin(), m.end(), [this](seal::Ciphertext &ctx) {
+        std::for_each(std::execution::seq, m.begin(), m.end(), [this](seal::Ciphertext &ctx) {
             w_evaluator->evaluator->transform_to_ntt_inplace(ctx);
         });
     }
 
     void MatrixOperations::from_ntt(std::vector<seal::Ciphertext> &m) const {
-        std::for_each(std::execution::par_unseq, m.begin(), m.end(), [this](seal::Ciphertext &ctx) {
+        std::for_each(std::execution::seq, m.begin(), m.end(), [this](seal::Ciphertext &ctx) {
             w_evaluator->evaluator->transform_from_ntt_inplace(ctx);
         });
     }
+
 
 
     void MatrixOperations::multiply(const matrix<seal::Ciphertext> &left,
@@ -195,6 +207,7 @@ namespace math_utils {
                                     matrix<seal::Ciphertext> &result) const {
 
         verify_spltptx_ctx_mat_mul_args(left_ntt, right);
+        result.resize(left_ntt.rows, right.cols); // FIX: Ensure result matrix is sized correctly
         mat_mult(left_ntt, right, result);
     }
 

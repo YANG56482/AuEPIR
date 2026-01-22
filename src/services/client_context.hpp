@@ -4,7 +4,7 @@
 #include "pir_client.hpp"
 #include "db.hpp"
 #include "utils.hpp"
-#include "distribicom.grpc.pb.h"
+
 #include "distribicom.pb.h"
 
 namespace services {
@@ -17,7 +17,7 @@ namespace services {
 
         PirQuery query;
         seal::GaloisKeys galois_keys;
-        std::unique_ptr<distribicom::Client::Stub> client_stub;
+
 
         std::shared_ptr<math_utils::matrix<seal::Plaintext>> partial_answer;
 

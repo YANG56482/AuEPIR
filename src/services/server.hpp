@@ -2,7 +2,6 @@
 #pragma once
 
 #include "distribicom.pb.h"
-#include "distribicom.grpc.pb.h"
 #include "manager.hpp"
 #include "db.hpp"
 #include "pir_client.hpp"
@@ -13,10 +12,10 @@ namespace services {
 
 
     // uses both the Manager and the Server services to complete a full distribicom server.
-    class FullServer final : public distribicom::Server::Service {
+    class FullServer final {
 
         // using composition to implement the interface of the manager.
-        services::Manager manager;
+        std::shared_ptr<services::Manager> manager;
 
         distribicom::Configs pir_configs;
         PirParams pir_params;
@@ -27,26 +26,14 @@ namespace services {
 
     public:
         // mainly for testing.
-        explicit FullServer(math_utils::matrix<seal::Plaintext> &db,
+        explicit FullServer(math_utils::matrix<seal::Plaintext> &&db,
                             std::map<uint32_t, std::unique_ptr<services::ClientInfo>> &client_db,
                             const distribicom::AppConfigs &app_configs);
 
 //        explicit FullServer(const distribicom::AppConfigs &app_configs);
 
-
-        grpc::Status
-        RegisterAsClient(grpc::ServerContext *context, const distribicom::ClientRegistryRequest *request,
-                         distribicom::ClientRegistryReply *response) override;
-
-        grpc::Status
-        StoreQuery(grpc::ServerContext *context, const distribicom::ClientQueryRequest *request,
-                   distribicom::Ack *response) override;
-
-        grpc::Status
-        WriteToDB(grpc::ServerContext *context, const distribicom::WriteRequest *request,
-                  distribicom::Ack *response) override;
-
-        grpc::Service *get_manager_service();
+                   
+        void Shutdown();
 
         // The server gives the manager the current state of the DB and the queries.
         // The manager then distributes the work to the workers and returns the results.
@@ -54,7 +41,7 @@ namespace services {
 
         void wait_for_workers(int i);
 
-        void start_epoch();
+        void start_epoch(int round = 0, bool clear_blacklist = true);
 
         void publish_galois_keys();
 
@@ -68,10 +55,13 @@ namespace services {
 
         void run_step_2(std::shared_ptr<WorkDistributionLedger>);
 
-        void close() { manager.close(); }
+        void close() { manager->close(); }
 
         // for testing:
-        const ClientDB &get_client_db() { return manager.client_query_manager; }
+        ClientDB &get_client_db() { return manager->client_query_manager; }
+        
+        // Protocol D: Expose Manager for HMAC Checks
+        std::shared_ptr<Manager> get_manager() { return manager; }
 
     private:
         void init_pir_data(const distribicom::AppConfigs &app_configs);

@@ -252,15 +252,19 @@ namespace math_utils {
     }
 
     void EvaluatorWrapper::get_ptx_embedding(const seal::Ciphertext &ctx, EmbeddedCiphertext &ptx_decomposition) const {
-
-        ptx_decomposition = std::move(decompose_to_plaintexts(context.first_context_data()->parms(), ctx));
-
-
+        auto context_data = context.get_context_data(ctx.parms_id());
+        if (!context_data) {
+             // Fallback or error? If ctx is invalid, this is bad.
+             // Try first context? No, that causes the crash.
+             // Throw?
+             throw std::invalid_argument("EvaluatorWrapper::get_ptx_embedding: Invalid CTX parms_id");
+        }
+        ptx_decomposition = std::move(decompose_to_plaintexts(context_data->parms(), ctx));
     }
 
     void EvaluatorWrapper::compose_to_ctx(const std::vector<seal::Plaintext> &ptx_decomposition,
                                           seal::Ciphertext &decoded) const {
-        seal::Ciphertext ctx_copy(context, context.last_parms_id());
+        seal::Ciphertext ctx_copy(context, context.first_parms_id());
         compose_to_ciphertext(context.first_context_data()->parms(), ptx_decomposition, ctx_copy);
         decoded = std::move(ctx_copy);
     }
@@ -283,6 +287,9 @@ namespace math_utils {
 
     void EvaluatorWrapper::scalar_multiply(std::uint64_t scalar, const seal::Ciphertext &right,
                                            seal::Ciphertext &sum) const {
+        sum.resize(context, right.parms_id(), right.size());
+        sum.is_ntt_form() = right.is_ntt_form();
+        sum.scale() = right.scale();
 
 //        seal::Plaintext ptx;
 //        ptx = scalar;

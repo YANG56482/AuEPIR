@@ -1,7 +1,7 @@
 #pragma once
 
 #include "seal/seal.h"
-#include "distribicom.grpc.pb.h"
+#include "distribicom.pb.h"
 #include <execution>
 
 namespace marshal {
@@ -11,6 +11,7 @@ namespace marshal {
         seal::EncryptionParameters enc_params; // SEAL parameters
         seal::SEALContext context;
 
+    public:
         explicit Marshaller(seal::EncryptionParameters enc_params);
 
     public:

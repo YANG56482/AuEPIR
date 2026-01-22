@@ -2,7 +2,7 @@
 
 #include "math_utils/matrix.h"
 #include "seal/seal.h"
-#include "distribicom.grpc.pb.h"
+// #include "distribicom.grpc.pb.h"
 #include <mutex>
 #include <utility>
 #include "pir_client.hpp"
@@ -30,12 +30,20 @@ namespace services{
 
         // used mainly for testing.
         explicit DB(math_utils::matrix<T> &mat) : memory_matrix(mat), mtx() {}
+        
+        // move constructor to avoid deep copy
+        explicit DB(math_utils::matrix<T> &&mat) : memory_matrix(std::move(mat)), mtx() {}
 
         // gives access to a locked reference of the matrix.
         // as long as the shared_mat instance is not destroyed the DB remains locked.
         // useful for distributing the DB, or going over multiple rows.
         shared_mat many_reads() {
             return shared_mat(memory_matrix, mtx);
+        }
+
+        void transform_inplace(std::function<void(math_utils::matrix<T>&)> func) {
+            std::lock_guard<std::mutex> l(mtx);
+            func(memory_matrix);
         }
 
         void write(const T &t, const std::uint32_t row, const std::uint32_t col) {

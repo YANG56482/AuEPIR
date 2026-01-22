@@ -27,20 +27,7 @@ namespace math_utils {
     seal::Ciphertext MatrixOperations::mult_row(uint64_t i, uint64_t j, const matrix<U> &left,
                                                 const matrix<V> &right) const {
         seal::Ciphertext tmp;
-        seal::Ciphertext tmp_result(w_evaluator->context);
-        // compiletime if, ensures the row multiplication is correct.
-        if constexpr (
-
-            // case 1: left  is ptx and right is ctx
-            ((std::is_same_v<U, seal::Plaintext> || std::is_same_v<U, SplitPlaintextNTTForm>) &&
-             std::is_same_v<V, seal::Ciphertext>) ||
-
-            // case 2: right is ptx and left is ctx
-            ((std::is_same_v<V, seal::Plaintext> || std::is_same_v<V, SplitPlaintextNTTForm>) &&
-             std::is_same_v<U, seal::Ciphertext>)
-            ) {
-            w_evaluator->evaluator->transform_to_ntt_inplace(tmp_result);
-        }
+        seal::Ciphertext tmp_result; // No context init needed if assigned immediately
 
         // assume that in seal::Plaintext case we don't want to turn into splitPlaintexts
         for (uint64_t k = 0; k < left.cols; ++k) {
@@ -51,7 +38,12 @@ namespace math_utils {
             } else {
                 w_evaluator->mult(left(i, k), right(k, j), tmp);
             }
-            w_evaluator->add(tmp, tmp_result, tmp_result);
+
+            if (k == 0) {
+                tmp_result = tmp;
+            } else {
+                w_evaluator->add(tmp, tmp_result, tmp_result);
+            }
         }
         return tmp_result;
     }
@@ -104,8 +96,8 @@ namespace math_utils {
 
         } else if constexpr (std::is_same_v<U, seal::Plaintext> && std::is_same_v<V, seal::Ciphertext>) {
 
-            if (left.data[0].is_ntt_form()) {
-                throw std::invalid_argument("MatrixOperations::multiply: left matrix should not be in NTT form");
+            if (!left.data[0].is_ntt_form()) {
+                throw std::invalid_argument("MatrixOperations::multiply: left matrix should be in NTT form");
             }
             if (!right.data[0].is_ntt_form()) {
                 throw std::invalid_argument("MatrixOperations::multiply: right matrix should be in NTT form");
@@ -180,10 +172,16 @@ namespace math_utils {
                 {
                     .f = [&, k, result_vec, vec, mat]() {
                         seal::Ciphertext tmp(w_evaluator->context);
-                        seal::Ciphertext rslt(w_evaluator->context);
+                        seal::Ciphertext rslt;
+                        bool first = true;
                         for (uint64_t j = 0; j < mat->rows; j++) {
-                            w_evaluator->scalar_multiply((*vec)[j], (*mat)(j, k), tmp);
-                            w_evaluator->add(tmp, rslt, rslt);
+                            if (first) {
+                                w_evaluator->scalar_multiply((*vec)[j], (*mat)(j, k), rslt);
+                                first = false;
+                            } else {
+                                w_evaluator->scalar_multiply((*vec)[j], (*mat)(j, k), tmp);
+                                w_evaluator->add(tmp, rslt, rslt);
+                            }
                         }
                         (*result_vec)(0, k) = rslt;
                     },
@@ -212,10 +210,16 @@ namespace math_utils {
                 {
                     .f= [&, k, result_vec, vec, mat]() {
                         seal::Ciphertext tmp(w_evaluator->context);
-                        seal::Ciphertext rslt(w_evaluator->context);
+                        seal::Ciphertext rslt;
+                        bool first = true;
                         for (uint64_t j = 0; j < mat->cols; j++) {
-                            w_evaluator->scalar_multiply((*vec)[j], (*mat)(k, j), tmp);
-                            w_evaluator->add(tmp, rslt, rslt);
+                            if (first) {
+                                w_evaluator->scalar_multiply((*vec)[j], (*mat)(k, j), rslt);
+                                first = false;
+                            } else {
+                                w_evaluator->scalar_multiply((*vec)[j], (*mat)(k, j), tmp);
+                                w_evaluator->add(tmp, rslt, rslt);
+                            }
                         }
                         (*result_vec)(k, 0) = rslt;
                     },
@@ -240,13 +244,18 @@ namespace math_utils {
         auto result_vec = std::make_shared<matrix<seal::Ciphertext>>(mat->cols, 1);
         for (uint64_t k = 0; k < mat->cols; k++) {
             seal::Ciphertext tmp(w_evaluator->context);
-            seal::Ciphertext rslt(w_evaluator->context);
+            seal::Ciphertext rslt;
+            bool first = true;
             for (uint64_t j = 0; j < mat->rows; j++) {
-                w_evaluator->scalar_multiply((*vec)[j], (*mat)(j, k), tmp);
-                w_evaluator->add(tmp, rslt, rslt);
+                if (first) {
+                    w_evaluator->scalar_multiply((*vec)[j], (*mat)(j, k), rslt);
+                    first = false;
+                } else {
+                    w_evaluator->scalar_multiply((*vec)[j], (*mat)(j, k), tmp);
+                    w_evaluator->add(tmp, rslt, rslt);
+                }
             }
             (*result_vec)(k, 0) = rslt;
-
         }
 
         return result_vec;
@@ -264,13 +273,18 @@ namespace math_utils {
         auto result_vec = std::make_shared<matrix<seal::Ciphertext>>(mat->rows, 1);
         for (uint64_t k = 0; k < mat->rows; k++) {
             seal::Ciphertext tmp(w_evaluator->context);
-            seal::Ciphertext rslt(w_evaluator->context);
+            seal::Ciphertext rslt;
+            bool first = true;
             for (uint64_t j = 0; j < mat->cols; j++) {
-                w_evaluator->scalar_multiply((*vec)[j], (*mat)(k, j), tmp);
-                w_evaluator->add(tmp, rslt, rslt);
+                if (first) {
+                    w_evaluator->scalar_multiply((*vec)[j], (*mat)(k, j), rslt);
+                    first = false;
+                } else {
+                    w_evaluator->scalar_multiply((*vec)[j], (*mat)(k, j), tmp);
+                    w_evaluator->add(tmp, rslt, rslt);
+                }
             }
             (*result_vec)(k, 0) = rslt;
-
         }
 
         return result_vec;

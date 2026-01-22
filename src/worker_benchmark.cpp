@@ -41,7 +41,8 @@ distribicom::AppConfigs load_configs(char *const *argv) {
             temp_pir_configs.size_per_element(),
             1,
             10,
-            1
+            1,
+            temp_pir_configs.worker_step_size()
     );
     c.set_worker_num_cpus(num_worker_threads);
 

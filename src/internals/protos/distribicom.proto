@@ -21,6 +21,18 @@ service Worker {// anyone who wishes to work runs this services.
 // facing workers, pub/sub of work that should be done.
 service Manager {// masterServer runs this service.
 
+
+  // Get a challenge for registration
+  rpc GetWorkerChallenge (WorkerChallengeRequest) returns (WorkerChallenge) {};
+
+  // D. Authenticate Protocol: Bidirectional Session
+  // 1. Worker -> RequestTask
+  // 2. Server -> AuthChallenge (with Task)
+  // 3. Worker -> AuthResponse (Commit)
+  // 4. Server -> AuthToken
+  // 5. Worker -> WorkResult (Reveal)
+  rpc WorkerSession (stream WorkerMessage) returns (stream ServerMessage) {};
+
   // PartialWorkStream i save this on my server map.
   rpc RegisterAsWorker (WorkerRegistryRequest) returns (stream WorkerTaskPart) {};
 
@@ -73,7 +85,12 @@ message WorkerTaskPart {
     GaloisKeys gkey = 3;
     TaskMetadata md = 4;
     bool task_complete = 5;
+    MatrixPartBatch matrixPartBatch = 6;
   }
+}
+
+message MatrixPartBatch {
+  repeated MatrixPart parts = 1;
 }
 
 message TaskMetadata{
@@ -89,6 +106,7 @@ message MatrixPart {
 
   uint32 row = 3;
   uint32 col = 4;
+  double compute_time = 5;
 }
 
 message QueryCiphertext {
@@ -166,7 +184,60 @@ message WorkerRegistryRequest {
   uint32 workerPort = 2;
 
   string worker_ip = 3;
+
+  // C. Register Protocol fields
+  bytes registration_response = 4; // R_r = (ad_j, sigma)
+  bytes credential_id = 5;         // cid
+  bytes account_public_key = 6;    // pk_ss
 }
+
+message WorkerChallengeRequest {
+    string worker_id = 1; // Temporary ID or empty
+}
+
+message WorkerChallenge {
+    bytes nonce = 1;       // rs_j
+    string server_uid = 2; // uid
+}
+
+// New Messages for WorkerSession
+ message WorkerMessage {
+   oneof payload {
+     WorkerChallengeRequest request_task = 1; // Worker asks for work
+     AuthResponse auth_response = 2;          // Commit: (cid, ad, sig, h(Z))
+     WorkResult work_result = 3;              // Reveal: Z
+   }
+ }
+
+ message ServerMessage {
+   oneof payload {
+     AuthChallenge auth_challenge = 1;        // (ids, X, Y)
+     AuthToken auth_token = 2;                // Tok_j
+     Ack ack = 3;
+   }
+ }
+
+ message AuthResponse {
+   string credential_id = 1;
+   bytes associated_data = 2; // ad_j
+   string signature = 3;      // sigma
+   string result_hash = 4;    // h(Z)
+ }
+
+ message AuthChallenge {
+   string server_uid = 1;
+   WorkerTaskPart task_part = 2; // Contains MatrixPart (Ciphertext/Plaintext)
+ }
+
+ message AuthToken {
+   string token = 1;
+   bool valid = 2;
+ }
+
+ message WorkResult {
+   MatrixPart result_part = 1;
+   string token = 2; // Proof of permission
+ }
 
 // Every subscriber should have a certificate it created to ensure the connections from the server
 // are secure
@@ -209,6 +280,7 @@ message Configs {
   bool use_recursive_mod_switching = 11;
 
   double malicious_probability = 12;
+  int32 worker_step_size = 13;
 };
 
 // all configs necessary for individual client/worker ?

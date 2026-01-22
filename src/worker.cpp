@@ -1,5 +1,7 @@
 #include <iostream>
 #include <filesystem>
+#include <fstream>
+#include <unistd.h>
 #include "worker.hpp"
 #include "marshal/local_storage.hpp"
 #include "services/factory.hpp"
@@ -20,6 +22,11 @@ bool is_valid_command_line_args(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
+    // Redirect clog to worker_<pid>.log
+    std::string log_name = "worker_" + std::to_string(getpid()) + ".log";
+    static std::ofstream log_file(log_name, std::ios::out | std::ios::trunc);
+    std::clog.rdbuf(log_file.rdbuf());
+
     if (!is_valid_command_line_args(argc, argv)) {
         return -1;
     }
@@ -38,7 +45,9 @@ int main(int argc, char *argv[]) {
                                                                                  temp_pir_configs.db_cols(),
                                                                                  temp_pir_configs.size_per_element(),
                                                                                  1,
-                                                                                 10, 1);
+                                                                                 10, 1, temp_pir_configs.worker_step_size());
+    // Set Malicious Probability from Config
+    cnfgs.mutable_configs()->set_malicious_probability(temp_pir_configs.malicious_probability());
 
     cnfgs.set_worker_num_cpus(num_worker_threads); //@todo refactor into creation func
 
@@ -51,7 +60,10 @@ int main(int argc, char *argv[]) {
 
     services::Worker w(std::move(cnfgs));
     std::cout << "waiting for stream termination" << std::endl;
-    auto status = w.wait_for_stream_termination();
+    w.run_session();
+    
+
+    grpc::Status status = grpc::Status::OK;
     if (!status.ok()) {
         std::cout << "terminated stream, result:" << status.error_message() << std::endl;;
     }

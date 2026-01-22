@@ -11,7 +11,7 @@ constexpr std::string_view worker_port = "52100";
 
 std::thread runFullServer(std::latch &wg, services::FullServer &f);
 
-std::thread setupWorker(std::latch &wg, distribicom::AppConfigs &configs);
+std::thread setupWorker(std::latch &wg, distribicom::AppConfigs &configs, std::shared_ptr<services::Manager> mgr);
 
 services::FullServer
 full_server_instance(std::shared_ptr<TestUtils::CryptoObjects> &all, const distribicom::AppConfigs &configs);
@@ -30,7 +30,8 @@ int worker_test(int, char *[]) {
         256,
         1,
         10,
-        NUM_CLIENTS
+        NUM_CLIENTS,
+        1
     );
 
 #ifdef FREIVALDS
@@ -53,7 +54,8 @@ int worker_test(int, char *[]) {
     std::cout << "setting up worker-service" << std::endl;
     distribicom::AppConfigs moveable_appcnfgs;
     moveable_appcnfgs.CopyFrom(cfgs);
-    threads.emplace_back(setupWorker(wg, moveable_appcnfgs));
+    std::shared_ptr<services::Manager> mgr = fs.get_manager();
+    threads.emplace_back(setupWorker(wg, moveable_appcnfgs, mgr));
 
     std::vector<std::chrono::microseconds> results;
     fs.wait_for_workers(1);
@@ -122,18 +124,40 @@ full_server_instance(std::shared_ptr<TestUtils::CryptoObjects> &all, const distr
 
     auto cdb = create_client_db(num_clients, all, configs);
 
-    return services::FullServer(db, cdb, configs);
+    return services::FullServer(std::move(db), cdb, configs);
 }
 
 
 // assumes that configs are not freed until we copy it inside the thread!
-std::thread setupWorker(std::latch &wg, distribicom::AppConfigs &configs) {
-    return std::thread([&] {
+std::thread setupWorker(std::latch &wg, distribicom::AppConfigs &configs, std::shared_ptr<services::Manager> mgr) {
+    return std::thread([&, mgr] {
         try {
-            services::Worker worker(std::move(configs));
+            auto worker = std::make_shared<services::Worker>(std::move(configs));
+            
+            // Connect Shared Memory
+            worker->set_manager(mgr);
+            mgr->RegisterWorker(worker);
 
             wg.wait();
-            worker.close();
+            
+            // In Shared Memory, we usually run_session() or similar?
+            // worker->run_session(); // This blocks?
+            // In test, maybe we just wait?
+            // The Original test just waited on latch.
+            // But we need to process tasks!
+            // Let's spawn a thread for run_session?
+            
+            std::thread processing_thread([worker](){
+                worker->run_session();
+            });
+            
+            // Wait for test completion (wg)
+            // But we are ALREADY in a thread here (setupWorker returns thread).
+            // wg.wait() blocks this thread.
+            
+            processing_thread.join(); // run_session loops until closed?
+            
+            worker->close();
         } catch (std::exception &e) {
             std::cerr << "setupWorker :: exception: " << e.what() << std::endl;
         }
@@ -142,26 +166,9 @@ std::thread setupWorker(std::latch &wg, distribicom::AppConfigs &configs) {
 
 std::thread runFullServer(std::latch &wg, services::FullServer &f) {
     return std::thread([&] {
-        std::string server_address("0.0.0.0:" + std::string(server_port));
-
-
-        grpc::ServerBuilder builder;
-        builder.SetMaxMessageSize(services::constants::max_message_size);
-
-        builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-
-        auto sv = f.get_manager_service();
-        std::cout << "had sync methods?" << sv->has_synchronous_methods() << std::endl;
-        std::cout << "had callback methods?" << sv->has_callback_methods() << std::endl;
-        std::cout << "had generic methods?" << sv->has_generic_methods() << std::endl;
-
-        builder.RegisterService(f.get_manager_service());
-        auto server(builder.BuildAndStart());
-        std::cout << "manager and client services are listening on " << server_address << std::endl;
+        std::cout << "manager and client services are active (Shared Memory)" << std::endl;
         wg.wait();
 
         f.close();
-
-        server->Shutdown();
     });
 }

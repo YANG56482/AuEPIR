@@ -1,0 +1,11 @@
+set global num cpus to:8
+creating threadpool with 8 threads
+creating threadpool with 8 threads
+waiting for stream termination
+worker main thread: running
+Worker: Successfully connected to Manager.
+Starting WorkerSession (Protocol D)...
+Reader Stream Closed.
+worker main thread: stopping execution
+Worker stream/session terminated
+Worker stream/session terminated.

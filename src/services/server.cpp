@@ -1,23 +1,19 @@
 
-#include "server.hpp"
-#include "client_context.hpp"
+// forcing rebuild
+#include "services/server.hpp"
+#include "services/client_context.hpp"
 
 
-services::FullServer::FullServer(math_utils::matrix<seal::Plaintext> &db, std::map<uint32_t,
+services::FullServer::FullServer(math_utils::matrix<seal::Plaintext> &&db, std::map<uint32_t,
     std::unique_ptr<services::ClientInfo>> &client_db,
                                  const distribicom::AppConfigs &app_configs) :
-    manager(app_configs, client_db, db), pir_configs(app_configs.configs()),
+    pir_configs(app_configs.configs()),
     enc_params(utils::setup_enc_params(app_configs)) {
+    
+    manager = std::make_shared<services::Manager>(app_configs, client_db, std::move(db));
     init_pir_data(app_configs);
 
 }
-
-//services::FullServer::FullServer(const distribicom::AppConfigs &app_configs) :
-//         app_configs.configs().db_cols()), manager(app_configs),
-//        pir_configs(app_configs.configs()), enc_params(utils::setup_enc_params(app_configs)) {
-//    init_pir_data(app_configs);
-//
-//}
 
 void services::FullServer::init_pir_data(const distribicom::AppConfigs &app_configs) {
     const auto &configs = app_configs.configs();
@@ -26,79 +22,25 @@ void services::FullServer::init_pir_data(const distribicom::AppConfigs &app_conf
                    configs.use_batching(), configs.use_recursive_mod_switching());
 }
 
-grpc::Status
-services::FullServer::RegisterAsClient(grpc::ServerContext *context, const distribicom::ClientRegistryRequest *request,
-                                       distribicom::ClientRegistryReply *response) {
 
-//@todo fix expansion ration calc
-
-//    try {
-//        response->set_mailbox_id(manager.client_query_manager.add_client(context, request, pir_configs, math_utils::compute_expansion_ratio(enc_params)));
-//    } catch (std::exception &e) {
-//        std::cout << "Error: " << e.what() << std::endl;
-//        return {grpc::StatusCode::INTERNAL, e.what()};
-//    }
-//
-//    response->set_num_mailboxes(pir_configs.number_of_elements());
-//
-//    return grpc::Status::OK;
-    throw std::runtime_error("unimplemented");
-
-}
-
-//@todo this assumes that no one is registering, very dangerous
-grpc::Status
-services::FullServer::StoreQuery(grpc::ServerContext *context, const distribicom::ClientQueryRequest *request,
-                                 distribicom::Ack *response) {
-    throw std::runtime_error("StoreQuery unimplemented");
-
-//    auto id = request->mailbox_id();
-//
-//    std::unique_lock lock(*manager.client_query_manager.mutex);
-//    if (manager.client_query_manager.id_to_info.find(id) == manager.client_query_manager.id_to_info.end()) {
-//        return {grpc::StatusCode::NOT_FOUND, "Client not found"};
-//    }
-//
-//    manager.client_query_manager.id_to_info[id]->query_info_marshaled.CopyFrom(*request);
-//    response->set_success(true);
-//    return grpc::Status::OK;
-}
-
-//@todo fix this to translate bytes to coeffs properly when writing
-grpc::Status services::FullServer::WriteToDB(grpc::ServerContext *context, const distribicom::WriteRequest *request,
-                                             distribicom::Ack *response) {
-//    this->db.write();
-//    db_write_requests.push_back(std::async(
-//            [&](distribicom::WriteRequest request) {
-//                std::uint8_t msg = std::stoi(request.data());
-//                std::vector<uint64_t> msg1 = {msg};
-//                db.write(msg1, request.ptxnumber(), request.whereinptx(), this->client.get());
-//                return 0;
-//            },
-//            *request
-//    ));
-
-    return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+void services::FullServer::Shutdown() {
+    manager->Shutdown();
 }
 
 std::shared_ptr<services::WorkDistributionLedger> services::FullServer::distribute_work(std::uint64_t round) {
-    std::shared_lock client_db_lock(*(manager.client_query_manager.mutex));
-    return manager.distribute_work(manager.client_query_manager, round, 1);
+    std::shared_lock client_db_lock(*(manager->client_query_manager.mutex));
+    return manager->distribute_work(manager->client_query_manager, round, 1);
 }
 
-void services::FullServer::start_epoch() {
-    std::shared_lock client_db_lock(*manager.client_query_manager.mutex);
+void services::FullServer::start_epoch(int round, bool clear_blacklist) {
+    std::shared_lock client_db_lock(*manager->client_query_manager.mutex);
 
-    manager.new_epoch(manager.client_query_manager);
-    manager.send_galois_keys(manager.client_query_manager);
+    manager->new_epoch(manager->client_query_manager, round, clear_blacklist);
+    manager->send_galois_keys(manager->client_query_manager);
 }
 
 void services::FullServer::wait_for_workers(int i) {
-    manager.wait_for_workers(i);
-}
-
-grpc::Service *services::FullServer::get_manager_service() {
-    return (grpc::Service *) (&manager);
+    manager->wait_for_workers(i);
 }
 
 void services::FullServer::publish_galois_keys() {
@@ -110,18 +52,18 @@ void services::FullServer::publish_answers() {
 }
 
 void services::FullServer::send_stop_signal() {
-    manager.close();
+    manager->close();
 }
 
 void services::FullServer::learn_about_rouge_workers(std::shared_ptr<WorkDistributionLedger>) {
 #ifdef FREIVALDS
-    manager.wait_on_verification();
+    manager->wait_on_verification();
 #endif
 }
 
 void services::FullServer::run_step_2(std::shared_ptr<WorkDistributionLedger>) {
     auto time = utils::time_it([&]() {
-        manager.calculate_final_answer();
+        manager->calculate_final_answer();
     });
     std::cout << "Running step 2: " << time << " ms" << std::endl;
 

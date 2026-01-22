@@ -6,6 +6,7 @@ project(seal_download NONE)
 include(FetchContent)
 
 set(SEAL_THROW_ON_TRANSPARENT_CIPHERTEXT OFF)
+set(SEAL_USE_OPENMP ON CACHE BOOL "" FORCE)
 #set(SEAL_USE_INTEL_HEXL ON)
 
 FetchContent_Declare(

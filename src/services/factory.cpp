@@ -27,9 +27,11 @@ distribicom::AppConfigs
 services::configurations::create_app_configs(const std::string &server_hostname, std::uint64_t poly_deg, std::uint64_t logt, std::uint64_t rows,
                                              std::uint64_t cols, std::uint64_t ele_size,
                                              std::uint64_t number_of_workers,
-                                             std::uint64_t query_wait_time, std::uint64_t number_of_clients) {
+                                             std::uint64_t query_wait_time, std::uint64_t number_of_clients, std::uint64_t worker_step_size, double malicious_probability) {
     distribicom::AppConfigs c;
     c.mutable_configs()->CopyFrom(create_configs(poly_deg, logt, rows, cols, ele_size));
+    c.mutable_configs()->set_malicious_probability(malicious_probability);
+    c.mutable_configs()->set_worker_step_size(worker_step_size);
     c.mutable_main_server_hostname()->assign(server_hostname);
     c.set_number_of_workers(number_of_workers);
     c.set_query_wait_time(query_wait_time);

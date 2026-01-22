@@ -85,6 +85,7 @@ namespace math_utils {
 
         void from_ntt(std::vector<seal::Ciphertext> &m) const;
 
+
         // working with matrices:
         void left_multiply(const std::vector<std::uint64_t> &left_vec,
                            const matrix<seal::Ciphertext> &mat,

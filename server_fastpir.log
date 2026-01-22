@@ -1,0 +1,23 @@
+[FastPIR-Hybrid] Loading config from: ./example/pir_configs.json
+[FastPIR-Hybrid] Workers: 2, Queries: 5
+[FastPIR-Hybrid] Config Loaded: N=4096, LogT=22, DB=2048x4096 (Size/Item=256)
+[FastPIR-Hybrid] Initializing gRPC Manager...
+creating threadpool with 152 threads
+creating threadpool with 152 threads
+[FastPIR-Hybrid] gRPC Service Online on 0.0.0.0:50051
+[FastPIR-Hybrid] Waiting for workers...
+[Manager] Verifying Worker Registration...
+Manager::RegisterAsWorker: num workers registered: 1
+[Manager] Worker F9WNfkvSFdPcY+i/wIfBt4unka3H5eiwyxFOHuZs5PQ= requesting task.
+[Manager] Worker F9WNfkvSFdPcY+i/wIfBt4unka3H5eiwyxFOHuZs5PQ= waiting for next round...
+[Manager] Verifying Worker Registration...
+Manager::RegisterAsWorker: num workers registered: 2
+[FastPIR-Hybrid] All workers registered! (Authentication Complete)
+[FastPIR-Hybrid] Initializing FastPIR Logic (Local)...
+FastPIR Params: N=4096 LogT=21 Columns=104
+Generating FastPIR Client/Server...
+[Manager] Worker JfLmhCwbmU79XwEDwdDblSAM4ORHxM2cYGFZtT97SVw= requesting task.
+[Manager] Worker JfLmhCwbmU79XwEDwdDblSAM4ORHxM2cYGFZtT97SVw= waiting for next round...
+Generating Random DB (New)...
+Generating... 0%Generating... 1%Generating... 2%Generating... 3%Generating... 4%Generating... 5%Generating... 7%Generating... 8%Generating... 9%Generating... 10%Generating... 11%Generating... 13%Generating... 14%Generating... 15%Generating... 16%Generating... 17%Generating... 19%Generating... 20%Generating... 21%Generating... 22%Generating... 23%Generating... 25%Generating... 26%Generating... 27%Generating... 28%Generating... 29%Generating... 30%Generating... 32%Generating... 33%Generating... 34%Generating... 35%Generating... 36%Generating... 38%Generating... 39%Generating... 40%Generating... 41%Generating... 42%Generating... 44%Generating... 45%Generating... 46%Generating... 47%Generating... 48%Generating... 50%Generating... 51%Generating... 52%Generating... 53%Generating... 54%Generating... 56%Generating... 57%Generating... 58%Generating... 59%Generating... 60%Generating... 61%Generating... 63%Generating... 64%Generating... 65%Generating... 66%Generating... 67%Generating... 69%Generating... 70%Generating... 71%Generating... 72%Generating... 73%Generating... 75%Generating... 76%Generating... 77%Generating... 78%Generating... 79%Generating... 81%Generating... 82%Generating... 83%Generating... 84%Generating... 85%Generating... 87%Generating... 88%Generating... 89%Generating... 90%Generating... 91%Generating... 92%Generating... 94%Generating... 95%Generating... 96%Generating... 97%Generating... 98%
+Saving DB to cache...

@@ -87,8 +87,18 @@ namespace math_utils {
 
             for (uint32_t a = 0; a < temp.size(); a++) {
 
-                evaluator_->apply_galois(temp[a], galois_elts[i], galkey,
-                                         tempctxt_rotated);
+                try {
+                    evaluator_->apply_galois(temp[a], galois_elts[i], galkey,
+                                             tempctxt_rotated);
+                } catch (const std::exception& e) {
+                     std::cout << "[QueryExpander] Error in apply_galois: " << e.what() << std::endl;
+                     std::cout << "[QueryExpander] Temp[a] ParmsID: " << temp[a].parms_id()[0] << std::endl;
+                     // Context ID via enc_params_
+                     seal::SEALContext ctx(enc_params_, true);
+                     std::cout << "[QueryExpander] Context ID: " << ctx.first_context_data()->parms().parms_id()[0] << std::endl;
+                     std::cout << "[QueryExpander] GKey ParmsID: " << galkey.parms_id()[0] << std::endl;
+                     throw;
+                }
 
                 // cout << "rotate " <<
                 // client.decryptor_->invariant_noise_budget(tempctxt_rotated) << ", ";

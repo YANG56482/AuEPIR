@@ -1,0 +1,32 @@
+configs {
+  scheme: "bgv"
+  polynomial_degree: 4096
+  logarithm_plaintext_coefficient: 22
+  db_rows: 16
+  db_cols: 16
+  size_per_element: 256
+  dimensions: 2
+  number_of_elements: 11008
+  use_batching: true
+  worker_step_size: 1000
+}
+main_server_hostname: "inproc://server"
+number_of_workers: 32
+query_wait_time: 10
+number_of_clients: 32
+server_cpus: 1
+
+num queries:32
+results: 
+ [
+2112ms, 
+1912ms, 
+1912ms, 
+2252ms, 
+1810ms, 
+1896ms, 
+2017ms, 
+1902ms, 
+1881ms, 
+2129ms, 
+]

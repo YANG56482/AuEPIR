@@ -4,7 +4,7 @@
 #include <map>
 #include <random>
 #include <cstdlib>
-#include "distribicom.grpc.pb.h"
+#include "distribicom.pb.h"
 #include "math_utils/matrix_operations.hpp"
 #include "math_utils/query_expander.hpp"
 #include "marshal/marshal.hpp"
@@ -38,8 +38,17 @@ namespace services::work_strategy {
      * Upon constracting a WorkerServiceTask it'll forward the work to the strategy to conclude operations.
      * Once the strategy is done processing the task, it'll return a result to the worker.
      */
-    class WorkerStrategy {
+     
+    class IResponder {
+    public:
+        virtual ~IResponder() = default;
+        virtual void start_response(int round, int epoch, double compute_time) = 0;
+        virtual void send_part(const distribicom::MatrixPart& part) = 0;
+        virtual void finish_response() = 0;
+    };
 
+    class WorkerStrategy {
+    
     private:
 
 
@@ -50,12 +59,12 @@ namespace services::work_strategy {
         std::shared_ptr<math_utils::MatrixOperations> matops;
         std::map<int, seal::GaloisKeys> gkeys;
         std::shared_mutex mu;
-        std::unique_ptr<distribicom::Manager::Stub> manager_conn;
+        std::shared_ptr<IResponder> responder_;
         double malicious_probability = 0.0;
-
+        
     public:
         explicit WorkerStrategy(const seal::EncryptionParameters &enc_params,
-                                std::unique_ptr<distribicom::Manager::Stub> &&manager_conn, double malicious_probability = 0.0) noexcept;
+                                std::shared_ptr<IResponder> responder, double malicious_probability = 0.0) noexcept;
 
         void store_galois_key(seal::GaloisKeys &&keys, int query_position) {
             mu.lock();
@@ -75,6 +84,7 @@ namespace services::work_strategy {
 
         std::shared_ptr<marshal::Marshaller> mrshl;
         std::string sym_key;
+        double last_computation_time_ms = 0;
 
         void expand_queries(WorkerServiceTask &task);
 
@@ -83,10 +93,10 @@ namespace services::work_strategy {
     public:
         explicit RowMultiplicationStrategy(const seal::EncryptionParameters &enc_params,
                                            std::shared_ptr<marshal::Marshaller> &m,
-                                           std::unique_ptr<distribicom::Manager::Stub> &&manager_conn,
+                                           std::shared_ptr<IResponder> responder,
                                            std::string &&sym_key,
                                            double malicious_probability = 0.0) :
-            WorkerStrategy(enc_params, std::move(manager_conn), malicious_probability), mrshl(m), sym_key(std::move(sym_key)) {
+            WorkerStrategy(enc_params, responder, malicious_probability), mrshl(m), sym_key(std::move(sym_key)) {
         };
 
         math_utils::matrix<seal::Ciphertext> multiply_rows(WorkerServiceTask &task);
@@ -99,7 +109,7 @@ namespace services::work_strategy {
             try {
                 expand_queries(task);
 
-                if (task.ptx_rows.empty()) { return; }
+                if (cached_db_rows.empty()) { return; }
 
                 std::cout << fname << "multiplying..." << std::endl;
                 auto answer = multiply_rows(task);
@@ -128,6 +138,8 @@ namespace services::work_strategy {
                 std::cerr << "RowMultiplicationStrategy::process_task: failure: " << e.what() << std::endl;
             }
         }
+
+        std::map<int, std::vector<seal::Plaintext>> cached_db_rows; 
 
         std::vector<std::shared_ptr<concurrency::promise<distribicom::MatrixPart>>>
         async_marshal_computed(const math_utils::matrix<seal::Ciphertext> &computed, const std::map<int, int> &row_to_index);
